@@ -9,6 +9,12 @@
 #define PIN_EXTRA_2               26
 
 #define PIN_LED                   PIN_EXTRA_1
-#define LED_COUNT                 9
+#define LED_COUNT                 6
+#define LED_TIMEOUT_MS            15000
+
+#define PIN_MOTION_SENSOR         PIN_EXTRA_2
+
+#define BATTERY_VOLTAGE_UPDATE_MS 5000
+#define BATTERY_VOLTAGE_READ_MS   500
 
 #endif
