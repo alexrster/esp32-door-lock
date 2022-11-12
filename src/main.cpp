@@ -9,6 +9,7 @@
 
 const String pubsub_topic_lock = String(MQTT_TOPIC_PREFIX "/lock/set");
 const String pubsub_topic_light = String(MQTT_TOPIC_PREFIX "/light/set");
+const String pubsub_topic_restart = String(MQTT_TOPIC_PREFIX "/restart");
 
 MotionSensor mot(PIN_MOTION_SENSOR);
 SwitchRelayPin door_lock(PIN_DOOR_LOCK, HIGH);
@@ -18,6 +19,7 @@ CRGB
   current_color = CRGB::Black;
 
 bool
+  publishDoorLock0 = false,
   ledOn = false;
 
 uint16_t
@@ -29,7 +31,7 @@ unsigned long
   lastBatteryVoltageUpdateMs = 0,
   now = 0;
 
-void light_on(CRGB color = CRGB::Yellow) {
+void light_on(CRGB color) {
   if (ledOn && color == current_color) {
     lastLedOn = now;
     return;
@@ -40,9 +42,13 @@ void light_on(CRGB color = CRGB::Yellow) {
   ledOn = true;
   lastLedOn = now;
   current_color = color;
-  FastLED.showColor(color);
+  FastLED.showColor(CRGB::Yellow);
 
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/light", "1");
+}
+
+void light_on() {
+  light_on(CRGB::Blue);
 }
 
 void light_off() {
@@ -64,11 +70,14 @@ void door_lock_open() {
   log_i("DOOR LOCK open");
   light_on();
 
-  door_lock.setOn();
-  delay(300);
-  door_lock.setOff();
+  pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "U");
+  digitalWrite(PIN_DOOR_LOCK, HIGH);
+  // door_lock.setOn();
+  delay(500);
+  digitalWrite(PIN_DOOR_LOCK, LOW);
+  // door_lock.setOff();
 
-  pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "1");
+  publishDoorLock0 = true;
 }
 
 void on_motion_state(MotionState_t state) {
@@ -101,16 +110,22 @@ void on_pubsub_message(char* topic, uint8_t* data, unsigned int length) {
   else if (pubsub_topic_light.equals(topic) && parse_bool_meesage(data, length)) {
     light_on();
   }
+  else if (pubsub_topic_restart.equals(topic) && parse_bool_meesage(data, length)) {
+    ESP.restart();
+  }
 }
 
 void setup() {
   log_i("SETUP start");
   pinMode(PIN_LED, OUTPUT);
+  pinMode(PIN_DOOR_LOCK, OUTPUT);
   pinMode(PIN_BATTERY_LEVEL, INPUT);
 
   mot.onChanged(on_motion_state);
 
+  // FastLED.addLeds<WS2812B, PIN_LED, RGB>(leds, LED_COUNT);
   FastLED.addLeds<WS2812B, PIN_LED, RGB>(leds, LED_COUNT);
+  // FastLED.clearData(true);
   FastLED.setBrightness(255);
 
   wifi_setup();
@@ -129,6 +144,10 @@ void loop() {
   battery_voltage_loop();
 
   if (wifi_loop(now)) {
+    if (publishDoorLock0) {
+      publishDoorLock0 = !pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "S");
+    }
+
     ArduinoOTA.handle();
   }
 

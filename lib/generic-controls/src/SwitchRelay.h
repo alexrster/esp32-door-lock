@@ -28,7 +28,7 @@ class SwitchRelayPin : public SwitchRelay {
     { }
 
     SwitchRelayPin(uint8_t pin, uint8_t onValue, uint8_t pinModeType = OUTPUT)
-      : pin(pin), onValue(onValue), offValue(onValue ? 0 : 1)
+      : pin(pin), onValue(onValue), offValue(onValue == HIGH ? LOW : HIGH)
     { 
       pinMode(pin, pinModeType);
       setState(state);
