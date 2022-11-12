@@ -72,8 +72,12 @@ bool parse_bool_meesage(uint8_t* payload, unsigned int length, bool defaultValue
   switch (length) {
     case 1: 
       switch (payload[0]) {
-        case '1': return true;
-        case '0': return false;
+        case 'U':
+        case '1': 
+          return true;
+        case 'S':
+        case '0': 
+          return false;
         default: return defaultValue;
       }
       break;
