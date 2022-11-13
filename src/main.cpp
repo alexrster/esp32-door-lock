@@ -6,6 +6,7 @@
 #include <FastLED.h>
 #include <MotionSensor.h>
 #include <SwitchRelay.h>
+#include <ble-lock.h>
 
 const String pubsub_topic_lock = String(MQTT_TOPIC_PREFIX "/lock/set");
 const String pubsub_topic_light = String(MQTT_TOPIC_PREFIX "/light/set");
@@ -121,6 +122,8 @@ void setup() {
   pinMode(PIN_DOOR_LOCK, OUTPUT);
   pinMode(PIN_BATTERY_LEVEL, INPUT);
 
+  ble_lock_setup();
+
   mot.onChanged(on_motion_state);
 
   // FastLED.addLeds<WS2812B, PIN_LED, RGB>(leds, LED_COUNT);
@@ -130,9 +133,9 @@ void setup() {
 
   wifi_setup();
   pubSubClient.setCallback(on_pubsub_message);
-  ArduinoOTA.begin();
+  // ArduinoOTA.begin();
 
-  light_on();
+  // light_on();
   log_i("SETUP done");
 }
 
@@ -142,13 +145,14 @@ void loop() {
   mot.loop();
   light_loop();
   battery_voltage_loop();
+  ble_lock_loop();
 
   if (wifi_loop(now)) {
     if (publishDoorLock0) {
       publishDoorLock0 = !pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "S");
     }
 
-    ArduinoOTA.handle();
+    // ArduinoOTA.handle();
   }
 
   delay(200);
