@@ -16,7 +16,7 @@
 #define MQTT_SERVER_PORT              1883
 #define MQTT_USERNAME                 NULL
 #define MQTT_PASSWORD                 NULL
-#define MQTT_RECONNECT_MILLIS         0 // 5000
+#define MQTT_RECONNECT_MILLIS         200
 
 #ifndef MQTT_CLIENT_ID
 #define MQTT_CLIENT_ID                WIFI_HOSTNAME
@@ -31,7 +31,7 @@
 extern WiFiClient wifiClient;
 extern PubSubClient pubSubClient;
 
-void wifi_setup();
+void wifi_setup(bool cleanSetup = true);
 bool wifi_loop(unsigned long now);
 boolean parse_bool_meesage(uint8_t* payload, unsigned int length, boolean defaultValue = false);
 

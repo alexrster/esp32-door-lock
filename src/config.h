@@ -8,6 +8,9 @@
 #define PIN_EXTRA_1               GPIO_NUM_25
 #define PIN_EXTRA_2               GPIO_NUM_26
 
+#ifdef DEBUG
+#define LED                       2
+#endif
 
 #define PIN_LED                   PIN_EXTRA_1
 #define LED_COUNT                 9
@@ -22,5 +25,8 @@
 #define DEEP_SLEEP_TIME_US        3 * 1000000
 #define MIN_RUN_TIME_MS           200
 #define MAX_RUN_TIME_WAIT_WIFI_MS 10 * MIN_RUN_TIME_MS
+
+#define DOOR_LOCK_IMPULSE_MS      500
+#define DOOR_LOCK_MIN_DELAY_MS    30000
 
 #endif
