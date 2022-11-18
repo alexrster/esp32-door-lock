@@ -12,8 +12,8 @@ bool reconnectPubSub(unsigned long now) {
   if (now - lastPubSubReconnectAttempt > MQTT_RECONNECT_MILLIS) {
     lastPubSubReconnectAttempt = now;
 
-    if (pubSubClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD, MQTT_STATUS_TOPIC, MQTTQOS0, true, MQTT_STATUS_OFFLINE_MSG, true)) {
-      pubSubClient.publish(MQTT_STATUS_TOPIC, MQTT_STATUS_ONLINE_MSG, true);
+    if (pubSubClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD, MQTT_STATUS_TOPIC, MQTTQOS0, true, MQTT_STATUS_OFFLINE_MSG, false)) {
+      // pubSubClient.publish(MQTT_STATUS_TOPIC, MQTT_STATUS_ONLINE_MSG, true);
 
       // BEGIN CUSTOM CODE
       pubSubClient.subscribe(MQTT_TOPIC_PREFIX "/lock/set");
@@ -38,9 +38,10 @@ bool mqtt_loop(unsigned long now) {
 }
 
 bool wifi_loop(unsigned long now) {
-  if (WiFi.status() != WL_CONNECTED) {
-    if (now - lastWifiOnline > WIFI_WATCHDOG_MILLIS) esp_restart(); //restart(RESET_ON_WIFI_WD_TIMEOUT);
-    else if (now - lastWifiReconnect > WIFI_RECONNECT_MILLIS) {
+  if (!WiFi.isConnected()) {
+    // if (now - lastWifiOnline > WIFI_WATCHDOG_MILLIS) esp_restart(); //restart(RESET_ON_WIFI_WD_TIMEOUT);
+    // else 
+    if (now - lastWifiReconnect > WIFI_RECONNECT_MILLIS) {
       lastWifiReconnect = now;
 
       if (WiFi.reconnect()) {
@@ -61,8 +62,8 @@ bool wifi_loop(unsigned long now) {
 void wifi_setup() {
   WiFi.setHostname(WIFI_HOSTNAME);
   WiFi.setAutoConnect(true);
-  WiFi.setAutoReconnect(true);
-  WiFi.setSleep(wifi_ps_type_t::WIFI_PS_NONE);
+  WiFi.setAutoReconnect(false);
+  WiFi.setSleep(wifi_ps_type_t::WIFI_PS_MAX_MODEM);
   WiFi.begin(WIFI_SSID, WIFI_PASSPHRASE);
 
   pubSubClient.setServer(MQTT_SERVER_NAME, MQTT_SERVER_PORT);

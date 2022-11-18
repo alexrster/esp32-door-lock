@@ -14,10 +14,11 @@ typedef std::function<void(MotionState_t)> MotionSensorEventCallback;
 class MotionSensor
 {
   public:
-    MotionSensor(uint8_t pin) : pin(pin)
+    MotionSensor(uint8_t pin, uint8_t defaultValue = 0) : pin(pin)
     {
       pinMode(pin, INPUT);
-      setState(digitalRead(pin));
+      // setState(digitalRead(pin));
+      setState(defaultValue);
     }
 
     MotionState_t getState()
@@ -31,9 +32,16 @@ class MotionSensor
     }
 
     void loop() {
-      int s = digitalRead(pin);
-      if (s != (int)state) {
-        setState(s);
+      int s1 = digitalRead(pin);
+
+      // delay(50);
+      // int s2 = digitalRead(pin);
+      // if (s1 != s2) {
+      //   return;
+      // }
+
+      if (s1 != (int)state) {
+        setState(s1);
 
         if (onMotionStateCallback != NULL)
           onMotionStateCallback(state);
