@@ -6,6 +6,10 @@
 #include <FastLED.h>
 #include <MotionSensor.h>
 #include <SwitchRelay.h>
+#include <ble-lock.h>
+
+RTC_DATA_ATTR static time_t boot_last_time;        // remember last boot in RTC Memory
+RTC_DATA_ATTR static uint32_t boot_count; // remember number of boots in RTC Memory
 
 const String pubsub_topic_lock = String(MQTT_TOPIC_PREFIX "/lock/set");
 const String pubsub_topic_light = String(MQTT_TOPIC_PREFIX "/light/set");
@@ -19,7 +23,6 @@ CRGB
   current_color = CRGB::Black;
 
 bool
-  publishDoorLock0 = false,
   ledOn = false;
 
 uint16_t
@@ -29,7 +32,10 @@ unsigned long
   lastLedOn = 0,
   lastBatteryVoltageReadMs = 0,
   lastBatteryVoltageUpdateMs = 0,
+  lastDoorLockActivatedMs = 0,
   now = 0;
+
+struct timeval now_time;
 
 void light_on(CRGB color) {
   if (ledOn && color == current_color) {
@@ -72,12 +78,12 @@ void door_lock_open() {
 
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "U");
   digitalWrite(PIN_DOOR_LOCK, HIGH);
-  // door_lock.setOn();
-  delay(500);
-  digitalWrite(PIN_DOOR_LOCK, LOW);
-  // door_lock.setOff();
+  lastDoorLockActivatedMs = now;
 
-  publishDoorLock0 = true;
+  // // door_lock.setOn();
+  // delay(500);
+  // digitalWrite(PIN_DOOR_LOCK, LOW);
+  // // door_lock.setOff();
 }
 
 void on_motion_state(MotionState_t state) {
@@ -102,6 +108,17 @@ void battery_voltage_loop() {
   }
 }
 
+void door_lock_loop() {
+  if (lastDoorLockActivatedMs > 0 && now - lastDoorLockActivatedMs > 500) {
+    lastDoorLockActivatedMs = 0;
+
+    digitalWrite(PIN_DOOR_LOCK, LOW);
+    // door_lock.setOff();
+
+    pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "S");
+  }
+}
+
 void on_pubsub_message(char* topic, uint8_t* data, unsigned int length) {
   log_d("MQTT message: topic=%s; length=%u; data=%s", topic, length, data);
   if (pubsub_topic_lock.equals(topic) && parse_bool_meesage(data, length)) {
@@ -116,23 +133,28 @@ void on_pubsub_message(char* topic, uint8_t* data, unsigned int length) {
 }
 
 void setup() {
+  log_i("BOOT #%u", ++boot_count);
+
+  gettimeofday(&now_time, NULL);
+  boot_last_time = now_time.tv_sec;
+  log_i("  %lds since last reset, %lds since last boot", now_time.tv_sec, now_time.tv_sec - boot_last_time);
+
   log_i("SETUP start");
   pinMode(PIN_LED, OUTPUT);
   pinMode(PIN_DOOR_LOCK, OUTPUT);
   pinMode(PIN_BATTERY_LEVEL, INPUT);
 
+  // ble_lock_setup();
+
   mot.onChanged(on_motion_state);
 
-  // FastLED.addLeds<WS2812B, PIN_LED, RGB>(leds, LED_COUNT);
   FastLED.addLeds<WS2812B, PIN_LED, RGB>(leds, LED_COUNT);
-  // FastLED.clearData(true);
   FastLED.setBrightness(255);
 
   wifi_setup();
   pubSubClient.setCallback(on_pubsub_message);
-  ArduinoOTA.begin();
 
-  light_on();
+  ArduinoOTA.begin();
   log_i("SETUP done");
 }
 
@@ -142,12 +164,10 @@ void loop() {
   mot.loop();
   light_loop();
   battery_voltage_loop();
+  door_lock_loop();
+  // ble_lock_loop();
 
   if (wifi_loop(now)) {
-    if (publishDoorLock0) {
-      publishDoorLock0 = !pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "S");
-    }
-
     ArduinoOTA.handle();
   }
 

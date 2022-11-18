@@ -4,7 +4,7 @@
 #define PIN_DOOR_BELL             2
 #define PIN_DOOR_LOCK             17
 #define PIN_DOOR_SENSOR           27
-#define PIN_BATTERY_LEVEL         4
+#define PIN_BATTERY_LEVEL         32
 #define PIN_EXTRA_1               25
 #define PIN_EXTRA_2               26
 

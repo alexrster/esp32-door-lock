@@ -62,7 +62,7 @@ void wifi_setup() {
   WiFi.setHostname(WIFI_HOSTNAME);
   WiFi.setAutoConnect(true);
   WiFi.setAutoReconnect(true);
-  WiFi.setSleep(wifi_ps_type_t::WIFI_PS_NONE);
+  // WiFi.setSleep(wifi_ps_type_t::WIFI_PS_NONE);
   WiFi.begin(WIFI_SSID, WIFI_PASSPHRASE);
 
   pubSubClient.setServer(MQTT_SERVER_NAME, MQTT_SERVER_PORT);
