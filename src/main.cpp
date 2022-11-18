@@ -8,6 +8,9 @@
 #include <SwitchRelay.h>
 #include <ble-lock.h>
 
+RTC_DATA_ATTR static time_t boot_last_time;        // remember last boot in RTC Memory
+RTC_DATA_ATTR static uint32_t boot_count; // remember number of boots in RTC Memory
+
 const String pubsub_topic_lock = String(MQTT_TOPIC_PREFIX "/lock/set");
 const String pubsub_topic_light = String(MQTT_TOPIC_PREFIX "/light/set");
 const String pubsub_topic_restart = String(MQTT_TOPIC_PREFIX "/restart");
@@ -31,6 +34,8 @@ unsigned long
   lastBatteryVoltageUpdateMs = 0,
   lastDoorLockActivatedMs = 0,
   now = 0;
+
+struct timeval now_time;
 
 void light_on(CRGB color) {
   if (ledOn && color == current_color) {
@@ -74,12 +79,11 @@ void door_lock_open() {
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "U");
   digitalWrite(PIN_DOOR_LOCK, HIGH);
   lastDoorLockActivatedMs = now;
+
   // // door_lock.setOn();
   // delay(500);
   // digitalWrite(PIN_DOOR_LOCK, LOW);
   // // door_lock.setOff();
-
-  // publishDoorLock0 = true;
 }
 
 void on_motion_state(MotionState_t state) {
@@ -129,6 +133,12 @@ void on_pubsub_message(char* topic, uint8_t* data, unsigned int length) {
 }
 
 void setup() {
+  log_i("BOOT #%u", ++boot_count);
+
+  gettimeofday(&now_time, NULL);
+  boot_last_time = now_time.tv_sec;
+  log_i("  %lds since last reset, %lds since last boot", now_time.tv_sec, now_time.tv_sec - boot_last_time);
+
   log_i("SETUP start");
   pinMode(PIN_LED, OUTPUT);
   pinMode(PIN_DOOR_LOCK, OUTPUT);
@@ -145,8 +155,6 @@ void setup() {
   pubSubClient.setCallback(on_pubsub_message);
 
   ArduinoOTA.begin();
-
-  // light_on();
   log_i("SETUP done");
 }
 

@@ -3,7 +3,7 @@
 
 #include <BLEDevice.h>
 #include <BLEUtils.h>
-#include <BLEServer.h>
+#include <BLEBeacon.h>
 
 #define BLE_DEVICE_NAME "esp32-door-lock"
 
