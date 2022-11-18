@@ -6,6 +6,7 @@
 #include <FastLED.h>
 #include <MotionSensor.h>
 #include <SwitchRelay.h>
+#include <ble-lock.h>
 
 const String pubsub_topic_lock = String(MQTT_TOPIC_PREFIX "/lock/set");
 const String pubsub_topic_light = String(MQTT_TOPIC_PREFIX "/light/set");
@@ -30,6 +31,7 @@ unsigned long
   lastLedOn = 0,
   minRunTimeMs = MIN_RUN_TIME_MS,
   now_global_start = 0,
+  lastDoorLockActivatedMs = 0,
   now = 0;
 
 RTC_DATA_ATTR unsigned long 
@@ -80,15 +82,15 @@ void door_lock_open() {
   log_i("DOOR LOCK open");
   light_on();
 
-  pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "U");
   digitalWrite(PIN_DOOR_LOCK, HIGH);
-  // door_lock.setOn();
-  delay(500);
-  digitalWrite(PIN_DOOR_LOCK, LOW);
-  // door_lock.setOff();
+  lastDoorLockActivatedMs = now;
 
   publishDoorLock0 = true;
   canSleep = false;
+  // // door_lock.setOn();
+  // delay(500);
+  // digitalWrite(PIN_DOOR_LOCK, LOW);
+  // // door_lock.setOff();
 }
 
 void on_motion_state(MotionState_t state) {
@@ -115,6 +117,17 @@ void battery_voltage_loop() {
     lastBatteryVoltageUpdateMs = now_global;
 
     publishBatteryLevel = true;
+  }
+}
+
+void door_lock_loop() {
+  if (lastDoorLockActivatedMs > 0 && now - lastDoorLockActivatedMs > 500) {
+    lastDoorLockActivatedMs = 0;
+
+    digitalWrite(PIN_DOOR_LOCK, LOW);
+    // door_lock.setOff();
+
+    pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "S");
   }
 }
 
@@ -171,6 +184,8 @@ void setup() {
   pinMode(PIN_DOOR_LOCK, OUTPUT);
   pinMode(PIN_BATTERY_LEVEL, INPUT);
 
+  // ble_lock_setup();
+
   mot.onChanged(on_motion_state);
 
   FastLED.addLeds<WS2812B, PIN_LED, RGB>(leds, LED_COUNT);
@@ -196,6 +211,8 @@ void loop() {
   mot.loop();
   light_loop();
   battery_voltage_loop();
+  door_lock_loop();
+  // ble_lock_loop();
 
   if (wifi_loop(now)) {
     wifiWasConnected = true;

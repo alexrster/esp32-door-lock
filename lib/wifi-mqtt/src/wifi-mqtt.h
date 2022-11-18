@@ -5,10 +5,10 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 
-#define WIFI_HOSTNAME                 "esp32-door-lock-debug"
-#define WIFI_SSID                     "qx.zone"
-#define WIFI_PASSPHRASE               "1234Qwer-"
-// #define WIFI_RECONNECT_MILLIS         10000
+#ifndef WIFI_HOSTNAME
+#define WIFI_HOSTNAME                 "esp32-door-lock"
+#endif
+
 #define WIFI_RECONNECT_MILLIS         800
 #define WIFI_WATCHDOG_MILLIS          60000
 
