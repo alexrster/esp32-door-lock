@@ -231,7 +231,9 @@ void loop() {
 
     if (publishDoorLock0) publishDoorLock0 = !pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "S");
     if (publishMotion1) publishMotion1 = !pubSubClient.publish(MQTT_TOPIC_PREFIX "/motion", "1");
-    if (publishBatteryLevel) publishBatteryLevel = !pubSubClient.publish(MQTT_TOPIC_PREFIX "/battery/raw", String(batteryLevel).c_str());
+    if (publishBatteryLevel) publishBatteryLevel = 
+      !pubSubClient.publish(MQTT_TOPIC_PREFIX "/battery/raw", String(batteryLevel).c_str()) ||
+      !pubSubClient.publish(MQTT_TOPIC_PREFIX "/light", ledOn ? "1" : "0");
 
     ArduinoOTA.handle();
   }
@@ -254,6 +256,8 @@ void loop() {
 
       auto m = millis();
       now_global = now_global_start + m;
+
+#ifdef DEBUG
       log_d("ENTER DEEP SLEEP: wifi=%s; battery=%u; messages=%u; led=%s; global_runtime=%u; runtime=%u", 
         wifiWasConnected ? "true" : "false", 
         batteryLevel, 
@@ -264,6 +268,7 @@ void loop() {
 
       Serial.flush(true);
       delay(10);
+#endif
 
       esp_sleep_enable_ext0_wakeup(PIN_MOTION_SENSOR, HIGH);
       esp_deep_sleep(DEEP_SLEEP_TIME_US);
