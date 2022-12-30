@@ -27,6 +27,7 @@ bool reconnectPubSub(unsigned long now) {
       // BEGIN CUSTOM CODE
       pubSubClient.subscribe(MQTT_TOPIC_PREFIX "/lock/set", 1);
       pubSubClient.subscribe(MQTT_TOPIC_PREFIX "/light/set", 1);
+      pubSubClient.subscribe(MQTT_TOPIC_PREFIX "/light/enabled/set", 1);
       // END CUSTOM CODE
 
       // pubSubClient.publish(MQTT_VERSION_TOPIC, VERSION, true);

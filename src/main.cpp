@@ -11,6 +11,7 @@
 const String pubsub_topic_lock = String(MQTT_TOPIC_PREFIX "/lock/set");
 const String pubsub_topic_light = String(MQTT_TOPIC_PREFIX "/light/set");
 const String pubsub_topic_restart = String(MQTT_TOPIC_PREFIX "/restart");
+const String pubsub_topic_light_enabled = String(MQTT_TOPIC_PREFIX "/light/enabled/set");
 
 MotionSensor mot(PIN_MOTION_SENSOR);
 SwitchRelayPin door_lock(PIN_DOOR_LOCK, HIGH);
@@ -47,9 +48,14 @@ RTC_DATA_ATTR uint16_t
   batteryLevel = 0;
 
 RTC_DATA_ATTR bool
+  lightEnabled = true,
   ledOn = false;
 
 void light_on(CRGB color) {
+  if (!lightEnabled) {
+    return;
+  }
+
   if (ledOn && color == current_color) {
     lastLedOn = now_global;
     return;
@@ -59,7 +65,9 @@ void light_on(CRGB color) {
   ledOn = true;
   lastLedOn = now_global;
 
+  #ifdef ENABLE_LED_POWER_DRIVER
   digitalWrite(PIN_LED_POWER, LED_POWER_ON);
+  #endif
 
   current_color = color;
   FastLED.showColor(CRGB::Yellow);
@@ -81,7 +89,9 @@ void light_off() {
   ledOn = false;
   FastLED.clear(true);
 
+  #ifdef ENABLE_LED_POWER_DRIVER
   digitalWrite(PIN_LED_POWER, LED_POWER_OFF);
+  #endif
 
   #ifdef DEBUG
   digitalWrite(LED, LOW);
@@ -151,6 +161,10 @@ void on_pubsub_message(char* topic, uint8_t* data, unsigned int length) {
     // pubSubClient.publish(pubsub_topic_light.c_str(), "0");
     light_on();
   }
+  else if (pubsub_topic_light_enabled.equals(topic) && length > 0) {
+    lightEnabled = parse_bool_meesage(data, length, true);
+    if (!lightEnabled) light_off();
+  }
   // else if (pubsub_topic_restart.equals(topic) && parse_bool_meesage(data, length)) {
   //   ESP.restart();
   // }
@@ -196,7 +210,10 @@ void setup() {
   pinMode(PIN_LED, OUTPUT);
   pinMode(PIN_DOOR_LOCK, OUTPUT);
   pinMode(PIN_BATTERY_LEVEL, INPUT);
+
+  #ifdef ENABLE_LED_POWER_DRIVER
   pinMode(PIN_LED_POWER, OUTPUT);
+  #endif
 
   #ifdef DEBUG
   pinMode(LED, OUTPUT);
