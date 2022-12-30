@@ -9,9 +9,6 @@
 #include <PushButton.h>
 // #include <ble-lock.h>
 
-RTC_DATA_ATTR static time_t boot_last_time;        // remember last boot in RTC Memory
-RTC_DATA_ATTR static uint32_t boot_count;          // remember number of boots in RTC Memory
-
 const String pubsub_topic_lock = String(MQTT_TOPIC_PREFIX "/lock/set");
 const String pubsub_topic_light = String(MQTT_TOPIC_PREFIX "/light/set");
 const String pubsub_topic_restart = String(MQTT_TOPIC_PREFIX "/restart");
@@ -27,23 +24,30 @@ CRGB
   blinking_current_color = CRGB::Black;
 
 bool
-  ledOn = false,
+  otaStarted = false,
+  wifiWasConnected = false,
   ledBlinking = false,
   connectionRestored = true;
 
-uint16_t
-  batteryLevel = 0;
+unsigned int
+  batteryLevel = 0,
+  messagesReceived = 0;
 
 unsigned long
-  lastLedOn = 0,
-  lastBatteryVoltageReadMs = 0,
-  lastBatteryVoltageUpdateMs = 0,
-  lastDoorLockActivatedMs = 0,
-  lastLedBlinkingMs = 0,
-  lastMotionDetectedMs = 0,
   now = 0;
 
-struct timeval now_time;
+RTC_DATA_ATTR unsigned long 
+  lastLedOn = 0,
+  lastDoorLockActivatedMs = 0,
+  lastBatteryVoltageReadMs = 0,
+  lastBatteryVoltageUpdateMs = 0,
+  lastDoorLockOnMs = 0,
+  lastLedBlinkingMs = 0,
+  lastMotionDetectedMs = 0,
+  now_global = 0;
+
+RTC_DATA_ATTR bool
+  ledOn = false;
 
 void light_set_color(CRGB color) {
   if (!ledOn || color == current_color) {
@@ -56,18 +60,16 @@ void light_set_color(CRGB color) {
 
 void light_on(CRGB color) {
   if (ledOn && color == current_color) {
-    lastLedOn = now;
+    lastLedOn = now_global;
     return;
   }
 
   log_i("light ON");
+  ledOn = true;
+  lastLedOn = now_global;
 
-  lastLedOn = now;
-
-  if (!ledBlinking) {
-    lastLedOn = now;
-    light_set_color(color);
-  }
+  current_color = color;
+  FastLED.showColor(CRGB::Yellow);
 
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/light", "1");
 }
@@ -80,6 +82,7 @@ void light_off() {
   log_i("light OFF");
 
   ledOn = false;
+  FastLED.showColor(CRGB::Black);
   FastLED.clear(true);
 
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/light", "0");
@@ -166,13 +169,14 @@ void on_motion_state(MotionState state) {
 }
 
 void battery_voltage_loop() {
-  if (now - lastBatteryVoltageReadMs > BATTERY_VOLTAGE_READ_MS) {
-    lastBatteryVoltageReadMs = now;
-    batteryLevel = (batteryLevel + analogRead(PIN_BATTERY_LEVEL)) / 2;
+  if (now_global - lastBatteryVoltageReadMs > BATTERY_VOLTAGE_READ_MS) {
+    if (lastBatteryVoltageReadMs > 0) batteryLevel = (batteryLevel + analogRead(PIN_BATTERY_LEVEL)) / 2;
+    else batteryLevel = analogRead(PIN_BATTERY_LEVEL);
+    lastBatteryVoltageReadMs = now_global;
   }
 
-  if (now - lastBatteryVoltageUpdateMs > BATTERY_VOLTAGE_UPDATE_MS) {
-    lastBatteryVoltageUpdateMs = now;
+  if (now_global - lastBatteryVoltageUpdateMs > BATTERY_VOLTAGE_UPDATE_MS) {
+    lastBatteryVoltageUpdateMs = now_global;
 
     pubSubClient.publish(MQTT_TOPIC_PREFIX "/battery/raw", String(batteryLevel).c_str());
   }
@@ -192,21 +196,43 @@ void on_pubsub_message(char* topic, uint8_t* data, unsigned int length) {
     if (parse_bool_meesage(data, length)) door_lock_open();
   }
   else if (pubsub_topic_light.equals(topic) && parse_bool_meesage(data, length)) {
+    // pubSubClient.publish(pubsub_topic_light.c_str(), "0");
     light_on();
   }
-  else if (pubsub_topic_restart.equals(topic) && parse_bool_meesage(data, length)) {
-    ESP.restart();
+  // else if (pubsub_topic_restart.equals(topic) && parse_bool_meesage(data, length)) {
+  //   ESP.restart();
+  // }
+}
+
+void on_ota_start() {
+  otaStarted = true;
+}
+
+void on_ota_error(ota_error_t err) {
+  log_w("OTA ERROR: code=%u", err);
+  esp_restart();
+}
+
+void print_wakeup_reason() {
+  esp_sleep_wakeup_cause_t wakeup_reason;
+
+  wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  switch(wakeup_reason)
+  {
+    case ESP_SLEEP_WAKEUP_EXT0 : log_i("- wakeup caused by external signal using RTC_IO"); break;
+    case ESP_SLEEP_WAKEUP_EXT1 : log_i("- wakeup caused by external signal using RTC_CNTL"); break;
+    case ESP_SLEEP_WAKEUP_TIMER : log_i("- wakeup caused by timer"); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD : log_i("- wakeup caused by touchpad"); break;
+    case ESP_SLEEP_WAKEUP_ULP : log_i("- wakeup caused by ULP program"); break;
+    default : log_i("- wakeup was not caused by deep sleep: %d\n", wakeup_reason); break;
   }
 }
 
 void setup() {
-  log_i("BOOT #%u", ++boot_count);
+  print_wakeup_reason();
 
-  gettimeofday(&now_time, NULL);
-  boot_last_time = now_time.tv_sec;
-  log_i("  %lds since last reset, %lds since last boot", now_time.tv_sec, now_time.tv_sec - boot_last_time);
-
-  log_i("SETUP start");
+  log_i("SETUP START");
   pinMode(PIN_LED, OUTPUT);
   pinMode(PIN_DOOR_LOCK, OUTPUT);
   pinMode(PIN_BATTERY_LEVEL, INPUT);
@@ -219,10 +245,15 @@ void setup() {
   FastLED.addLeds<WS2812B, PIN_LED, RGB>(leds, LED_COUNT);
   FastLED.setBrightness(255);
 
-  wifi_setup();
+  wifi_setup(true);
   pubSubClient.setCallback(on_pubsub_message);
 
+  ArduinoOTA.onStart(on_ota_start);
+  ArduinoOTA.onError(on_ota_error);
+  ArduinoOTA.setRebootOnSuccess(true);
+  ArduinoOTA.setMdnsEnabled(false);
   ArduinoOTA.begin();
+
   log_i("SETUP done");
 }
 
@@ -235,10 +266,11 @@ void loop() {
   now = millis();
   light_loop();
   battery_voltage_loop();
-  door_lock_loop();
   // ble_lock_loop();
 
   if (wifi_loop(now)) {
+    wifiWasConnected = true;
+
     ArduinoOTA.handle();
 
     if (connectionRestored) {
