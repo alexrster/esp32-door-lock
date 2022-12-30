@@ -13,6 +13,9 @@
 #endif
 
 #define PIN_LED                   PIN_EXTRA_1
+#define PIN_LED_POWER             PIN_DOOR_SENSOR
+#define LED_POWER_ON              LOW
+#define LED_POWER_OFF             HIGH
 #define LED_COUNT                 9
 
 #define LED_TIMEOUT_MS            15000

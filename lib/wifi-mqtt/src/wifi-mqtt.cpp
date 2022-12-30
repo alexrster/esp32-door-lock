@@ -65,7 +65,7 @@ bool wifi_loop(unsigned long now) {
   lastWifiReconnect = now;
   lastWifiOnline = now;
   
-  return mqtt_loop(now);
+  return true;
 }
 
 void wifi_setup(bool cleanSetup) {

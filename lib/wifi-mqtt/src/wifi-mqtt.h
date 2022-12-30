@@ -33,6 +33,7 @@ extern PubSubClient pubSubClient;
 
 void wifi_setup(bool cleanSetup = true);
 bool wifi_loop(unsigned long now);
+bool mqtt_loop(unsigned long now);
 boolean parse_bool_meesage(uint8_t* payload, unsigned int length, boolean defaultValue = false);
 
 #endif

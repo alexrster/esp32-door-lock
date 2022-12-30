@@ -24,6 +24,7 @@ bool
   publishMotion1 = false,
   publishBatteryLevel = false,
   canSleep = true,
+  otaStarted = false,
   wifiWasConnected = false;
 
 unsigned int
@@ -57,6 +58,9 @@ void light_on(CRGB color) {
   log_i("light ON");
   ledOn = true;
   lastLedOn = now_global;
+
+  digitalWrite(PIN_LED_POWER, LED_POWER_ON);
+
   current_color = color;
   FastLED.showColor(CRGB::Yellow);
 
@@ -76,6 +80,8 @@ void light_off() {
 
   ledOn = false;
   FastLED.clear(true);
+
+  digitalWrite(PIN_LED_POWER, LED_POWER_OFF);
 
   #ifdef DEBUG
   digitalWrite(LED, LOW);
@@ -151,6 +157,7 @@ void on_pubsub_message(char* topic, uint8_t* data, unsigned int length) {
 }
 
 void on_ota_start() {
+  otaStarted = true;
   canSleep = false;
 }
 
@@ -189,6 +196,7 @@ void setup() {
   pinMode(PIN_LED, OUTPUT);
   pinMode(PIN_DOOR_LOCK, OUTPUT);
   pinMode(PIN_BATTERY_LEVEL, INPUT);
+  pinMode(PIN_LED_POWER, OUTPUT);
 
   #ifdef DEBUG
   pinMode(LED, OUTPUT);
@@ -229,13 +237,17 @@ void loop() {
 
     wifiWasConnected = true;
 
-    if (publishDoorLock0) publishDoorLock0 = !pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "S");
-    if (publishMotion1) publishMotion1 = !pubSubClient.publish(MQTT_TOPIC_PREFIX "/motion", "1");
-    if (publishBatteryLevel) publishBatteryLevel = 
-      !pubSubClient.publish(MQTT_TOPIC_PREFIX "/battery/raw", String(batteryLevel).c_str()) ||
-      !pubSubClient.publish(MQTT_TOPIC_PREFIX "/light", ledOn ? "1" : "0");
-
     ArduinoOTA.handle();
+    if (otaStarted) return;
+
+    if (mqtt_loop(now)) {
+      if (publishDoorLock0) publishDoorLock0 = !pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "S");
+      if (publishMotion1) publishMotion1 = !pubSubClient.publish(MQTT_TOPIC_PREFIX "/motion", "1");
+      if (publishBatteryLevel) publishBatteryLevel = 
+        !pubSubClient.publish(MQTT_TOPIC_PREFIX "/battery/raw", String(batteryLevel).c_str()) ||
+        !pubSubClient.publish(MQTT_TOPIC_PREFIX "/light", ledOn ? "1" : "0") ||
+        !pubSubClient.publish(MQTT_TOPIC_PREFIX "/motion", mot.getState() == Detected ? "1" : "0");
+    }
   }
 
   if (canSleep && now > minRunTimeMs) {
