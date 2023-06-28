@@ -4,61 +4,91 @@
 #include <Arduino.h>
 #include <functional>
 
-typedef enum ButtonState { 
+#define DIGITAL_READ_COUNT          20
+#define DIGITAL_READ_THRESHOLD      10
+#define DIGITAL_READ_DELAY_MS       2
+#define READ_THRESHOLD_MS           200
+
+enum class ButtonState : uint8_t { 
   Off = 0,
   On
-} ButtonState_t;
-
+};
 
 class PushButton
 {
   public:
     typedef std::function<void(PushButton*)> PushButtonEventCallback;
 
-    PushButton(uint8_t pin, unsigned int threshold_ms = 100) : pin(pin), threshold_ms(threshold_ms)
+    PushButton(uint8_t pin, uint8_t inputMode = INPUT, uint8_t onValue = HIGH, unsigned int threshold_ms = 60) : pin(pin), onValue(onValue), threshold_ms(threshold_ms)
     {
-      pinMode(pin, INPUT);
-      setState(digitalRead(pin));
+      pinMode(pin, inputMode);
+      _setState(_digitalRead(pin));
     }
 
-    ButtonState_t getState()
+    ButtonState getState()
     {
       return state;
     }
 
+    ButtonState getStateRaw()
+    {
+      return _digitalRead(pin);
+    }
+
     void onChanged(PushButtonEventCallback cb)
     {
-      onStateCallback = cb;
+      _onStateChangedCb = cb;
     }
 
     void loop(unsigned long now) {
-      int s = digitalRead(pin);
-      if (s != (int)state) {
-        if (newState != s) {
+      if (now - lastRead_ms < READ_THRESHOLD_MS) return;
+      lastRead_ms = now;
+
+      auto s = _digitalRead(pin);
+      lastRead_ms = millis();
+
+      if (s != state) {
+        if (s != newState) {
           newState = s;
           newState_ms = now;
         }
-        else if (now - newState_ms > threshold_ms) {
-          setState(s);
+        else if (lastRead_ms - newState_ms > threshold_ms) {
+          _setState(s);
 
-          if (onStateCallback != NULL)
-            onStateCallback(this);
+          if (_onStateChangedCb != NULL)
+            _onStateChangedCb(this);
         }
       }
     }
 
   private:
     uint8_t pin;
+    uint8_t onValue;
     unsigned int threshold_ms;
     unsigned long newState_ms = 0;
-    ButtonState_t state = Off, lastState = Off, newState = Off;
-    PushButtonEventCallback onStateCallback = NULL;
+    unsigned long lastRead_ms = 0;
+    ButtonState state = ButtonState::Off, lastState = ButtonState::Off, newState = ButtonState::Off;
+    PushButtonEventCallback _onStateChangedCb = NULL;
 
-    void setState(int value) {
+    void _setState(ButtonState value) {
       log_d("PushButton @%d: value=%d", pin, value);
 
       lastState = state;
-      state = value == 0 ? Off : On;
+      state = value;
+    }
+
+    ButtonState _digitalRead(uint8_t pin)
+    {
+      uint8_t val = 0;
+      for (uint8_t i=0; i<DIGITAL_READ_COUNT; i++) {
+        if (digitalRead(pin) > 0) val++;
+        delay(DIGITAL_READ_DELAY_MS);
+      }
+
+      if (onValue > 0)
+        return val >= DIGITAL_READ_THRESHOLD ? ButtonState::On : ButtonState::Off;
+      else 
+        return val < DIGITAL_READ_THRESHOLD ? ButtonState::On : ButtonState::Off;
     }
 };
 

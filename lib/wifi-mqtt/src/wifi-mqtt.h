@@ -12,7 +12,7 @@
 #define WIFI_RECONNECT_MILLIS         10000
 #define WIFI_WATCHDOG_MILLIS          60000
 
-#define MQTT_SERVER_NAME              "ns2.in.qx.zone"
+#define MQTT_SERVER_NAME              "rabbitmq.in.qx.zone"
 #define MQTT_SERVER_PORT              1883
 #define MQTT_USERNAME                 NULL
 #define MQTT_PASSWORD                 NULL

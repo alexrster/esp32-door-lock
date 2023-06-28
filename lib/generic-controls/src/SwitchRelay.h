@@ -11,11 +11,11 @@ typedef enum SwitchState {
 class SwitchRelay {
   public:
     void setOn() {
-      setState(On);
+      setState(SwitchState_t::On);
     }
 
     void setOff() {
-      setState(Off);
+      setState(SwitchState_t::Off);
     }
 
     virtual SwitchState_t getState();
@@ -45,12 +45,12 @@ class SwitchRelayPin : public SwitchRelay {
   
   private:
     const uint8_t pin, onValue, offValue;
-    SwitchState_t state = Off;
+    SwitchState_t state = SwitchState_t::Off;
 };
 
 class SwitchRelayMock : public SwitchRelay {
   public:
-    SwitchRelayMock(SwitchState_t state = Off) : state(state) 
+    SwitchRelayMock(SwitchState_t state = SwitchState_t::Off) : state(state) 
     { }
 
     virtual SwitchState_t getState() {
@@ -61,7 +61,7 @@ class SwitchRelayMock : public SwitchRelay {
     { }
 
   private:
-    SwitchState_t state = Off;
+    SwitchState_t state = SwitchState_t::Off;
 };
 
 #endif

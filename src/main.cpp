@@ -6,10 +6,11 @@
 #include <FastLED.h>
 #include <MotionSensor.h>
 #include <SwitchRelay.h>
-#include <ble-lock.h>
+#include <PushButton.h>
+// #include <ble-lock.h>
 
 RTC_DATA_ATTR static time_t boot_last_time;        // remember last boot in RTC Memory
-RTC_DATA_ATTR static uint32_t boot_count; // remember number of boots in RTC Memory
+RTC_DATA_ATTR static uint32_t boot_count;          // remember number of boots in RTC Memory
 
 const String pubsub_topic_lock = String(MQTT_TOPIC_PREFIX "/lock/set");
 const String pubsub_topic_light = String(MQTT_TOPIC_PREFIX "/light/set");
@@ -17,13 +18,15 @@ const String pubsub_topic_restart = String(MQTT_TOPIC_PREFIX "/restart");
 
 MotionSensor mot(PIN_MOTION_SENSOR);
 SwitchRelayPin door_lock(PIN_DOOR_LOCK, HIGH);
+PushButton door_lock_sensor(PIN_DOOR_LOCK_SENSOR, INPUT_PULLUP, LOW);
 
 CRGB 
   leds[LED_COUNT],
   current_color = CRGB::Black;
 
 bool
-  ledOn = false;
+  ledOn = false,
+  connectionRestored = true;
 
 uint16_t
   batteryLevel = 0;
@@ -74,25 +77,29 @@ void light_loop() {
 
 void door_lock_open() {
   log_i("DOOR LOCK open");
+  door_lock.setOn();
+
+  lastDoorLockActivatedMs = millis();
   light_on();
-
-  pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "U");
-  digitalWrite(PIN_DOOR_LOCK, HIGH);
-  lastDoorLockActivatedMs = now;
-
-  // // door_lock.setOn();
-  // delay(500);
-  // digitalWrite(PIN_DOOR_LOCK, LOW);
-  // // door_lock.setOff();
 }
 
-void on_motion_state(MotionState_t state) {
-  if (state == MotionState_t::Detected) {
+void on_door_lock_state(PushButton *btn) {
+  auto state = btn->getState();
+  if (state == ButtonState::On) {
+    door_lock.setOff();
+    lastDoorLockActivatedMs = 0;
+  }
+  
+  pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", state == ButtonState::On ? "U" : "S", true);
+}
+
+void on_motion_state(MotionState state) {
+  if (state == MotionState::Detected) {
     log_i("Motion detected!");
     light_on();
   }
 
-  pubSubClient.publish(MQTT_TOPIC_PREFIX "/motion", state == Detected ? "1" : "0");
+  pubSubClient.publish(MQTT_TOPIC_PREFIX "/motion", state == MotionState::Detected ? "1" : "0");
 }
 
 void battery_voltage_loop() {
@@ -112,17 +119,14 @@ void door_lock_loop() {
   if (lastDoorLockActivatedMs > 0 && now - lastDoorLockActivatedMs > 500) {
     lastDoorLockActivatedMs = 0;
 
-    digitalWrite(PIN_DOOR_LOCK, LOW);
-    // door_lock.setOff();
-
-    pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "S");
+    door_lock.setOff();
   }
 }
 
 void on_pubsub_message(char* topic, uint8_t* data, unsigned int length) {
-  log_d("MQTT message: topic=%s; length=%u; data=%s", topic, length, data);
-  if (pubsub_topic_lock.equals(topic) && parse_bool_meesage(data, length)) {
-    door_lock_open();
+  // log_d("MQTT message: topic=%s; length=%u; data=%s", topic, length, data);
+  if (pubsub_topic_lock.equals(topic)) {
+    if (parse_bool_meesage(data, length)) door_lock_open();
   }
   else if (pubsub_topic_light.equals(topic) && parse_bool_meesage(data, length)) {
     light_on();
@@ -147,6 +151,7 @@ void setup() {
   // ble_lock_setup();
 
   mot.onChanged(on_motion_state);
+  door_lock_sensor.onChanged(on_door_lock_state);
 
   FastLED.addLeds<WS2812B, PIN_LED, RGB>(leds, LED_COUNT);
   FastLED.setBrightness(255);
@@ -162,6 +167,9 @@ void loop() {
   now = millis();
 
   mot.loop();
+  door_lock_sensor.loop(now);
+
+  now = millis();
   light_loop();
   battery_voltage_loop();
   door_lock_loop();
@@ -169,7 +177,15 @@ void loop() {
 
   if (wifi_loop(now)) {
     ArduinoOTA.handle();
+
+    if (connectionRestored) {
+      connectionRestored = false;
+
+      pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", door_lock_sensor.getState() == ButtonState::On ? "U" : "S", true);
+    }
+  } else {
+    connectionRestored = true;
   }
 
-  delay(200);
+  delay(10);
 }

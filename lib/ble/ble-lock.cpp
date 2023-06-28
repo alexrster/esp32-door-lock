@@ -24,7 +24,7 @@ void ble_lock_setup() {
 }
 
 void ble_lock_loop(unsigned long now) {
-  pBLEScan->start()
-  BLEScanResults foundDevices = pBLEScan->start(scanTime, false);
-  pBLEScan->clearResults();
+  // pBLEScan->start();
+  // BLEScanResults foundDevices = pBLEScan->start(scanTime, false);
+  // pBLEScan->clearResults();
 }

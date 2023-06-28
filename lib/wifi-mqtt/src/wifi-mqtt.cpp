@@ -62,15 +62,13 @@ void wifi_setup() {
   WiFi.setHostname(WIFI_HOSTNAME);
   WiFi.setAutoConnect(true);
   WiFi.setAutoReconnect(true);
-  // WiFi.setSleep(wifi_ps_type_t::WIFI_PS_NONE);
   WiFi.begin(WIFI_SSID, WIFI_PASSPHRASE);
 
   pubSubClient.setServer(MQTT_SERVER_NAME, MQTT_SERVER_PORT);
 }
 
 bool parse_bool_meesage(uint8_t* payload, unsigned int length, bool defaultValue) {
-  switch (length) {
-    case 1: 
+  if (length > 0) {
       switch (payload[0]) {
         case 'U':
         case '1': 
@@ -78,19 +76,20 @@ bool parse_bool_meesage(uint8_t* payload, unsigned int length, bool defaultValue
         case 'S':
         case '0': 
           return false;
-        default: return defaultValue;
+        default: 
+          switch (length) {
+            case 2:
+            case 3:
+              switch (payload[1]) {
+                case 'n': return true;
+                case 'f': return false;
+              }
+              break;
+            case 4: return true;
+            case 5: return false;
+            default: return defaultValue;
       }
-      break;
-    case 2:
-    case 3:
-      switch (payload[1]) {
-        case 'n': return true;
-        case 'f': return false;
-      }
-      break;
-    case 4: return true;
-    case 5: return false;
-    default: return defaultValue;
+    }
   }
 
   return defaultValue;
