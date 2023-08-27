@@ -22,10 +22,13 @@ PushButton door_lock_sensor(PIN_DOOR_LOCK_SENSOR, INPUT_PULLUP, LOW);
 
 CRGB 
   leds[LED_COUNT],
-  current_color = CRGB::Black;
+  current_color = CRGB::Black,
+  blinking_target_color = CRGB::Red,
+  blinking_current_color = CRGB::Black;
 
 bool
   ledOn = false,
+  ledBlinking = false,
   connectionRestored = true;
 
 uint16_t
@@ -36,9 +39,20 @@ unsigned long
   lastBatteryVoltageReadMs = 0,
   lastBatteryVoltageUpdateMs = 0,
   lastDoorLockActivatedMs = 0,
+  lastLedBlinkingMs = 0,
+  lastMotionDetectedMs = 0,
   now = 0;
 
 struct timeval now_time;
+
+void light_set_color(CRGB color) {
+  if (!ledOn || color == current_color) {
+    return;
+  }
+
+  current_color = color;
+  FastLED.showColor(current_color);
+}
 
 void light_on(CRGB color) {
   if (ledOn && color == current_color) {
@@ -48,16 +62,18 @@ void light_on(CRGB color) {
 
   log_i("light ON");
 
-  ledOn = true;
   lastLedOn = now;
-  current_color = color;
-  FastLED.showColor(CRGB::Yellow);
+
+  if (!ledBlinking) {
+    lastLedOn = now;
+    light_set_color(color);
+  }
 
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/light", "1");
 }
 
 void light_on() {
-  light_on(CRGB::Blue);
+  light_on(LED_COLOR_1);
 }
 
 void light_off() {
@@ -69,10 +85,48 @@ void light_off() {
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/light", "0");
 }
 
-void light_loop() {
-  if (ledOn && now - lastLedOn > LED_TIMEOUT_MS) {
-    light_off();
+void light_blink_start(CRGB color) {
+  log_i("light BLINK");
+
+  blinking_current_color = CRGB::Black;
+  blinking_target_color = color;
+
+  ledBlinking = true;
+  ledOn = false;
+}
+
+void light_blink_start() {
+  light_blink_start(CRGB::Red);
+}
+
+void light_blink_stop() {
+  ledBlinking = false;
+  ledOn = now - lastLedOn < LED_TIMEOUT_MS;
+}
+
+__inline void light_blink_loop() {
+  if (!ledBlinking) return;
+
+  if (now - lastLedBlinkingMs > LED_BLINKING_TIMEOUT_MS) {
+    lastLedBlinkingMs = now;
+
+    if (blinking_current_color != blinking_target_color) {
+      blinking_current_color = blinking_target_color;
+      FastLED.showColor(blinking_current_color);
+    } else {
+      blinking_current_color = CRGB::Black;
+      FastLED.clear(true);
+    }
   }
+}
+
+__inline void light_loop() {
+  light_blink_loop();
+  if (!ledOn) return;
+
+  if (now - lastLedOn > LED_TIMEOUT_MS) light_off();
+  else if (now - lastLedOn > LED_COLOR_2_TIMEOUT_MS) light_set_color(LED_COLOR_3);
+  else if (now - lastLedOn > LED_COLOR_1_TIMEOUT_MS) light_set_color(LED_COLOR_2);
 }
 
 void door_lock_open() {
@@ -88,6 +142,14 @@ void on_door_lock_state(PushButton *btn) {
   if (state == ButtonState::On) {
     door_lock.setOff();
     lastDoorLockActivatedMs = 0;
+
+    light_blink_start();
+  } else  {
+    light_blink_stop();
+
+    if (now - lastMotionDetectedMs > 5000) {
+      light_on();
+    }
   }
   
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", state == ButtonState::On ? "U" : "S", true);
@@ -96,6 +158,7 @@ void on_door_lock_state(PushButton *btn) {
 void on_motion_state(MotionState state) {
   if (state == MotionState::Detected) {
     log_i("Motion detected!");
+    lastMotionDetectedMs = now;
     light_on();
   }
 

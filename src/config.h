@@ -11,7 +11,14 @@
 #define PIN_LED                   PIN_EXTRA_1
 #define LED_COUNT                 9
 
-#define LED_TIMEOUT_MS            15000
+#define LED_COLOR_1               CRGB::FairyLight
+#define LED_COLOR_1_TIMEOUT_MS    30000
+#define LED_COLOR_2               CRGB::Yellow
+#define LED_COLOR_2_TIMEOUT_MS    37000
+#define LED_COLOR_3               CRGB::DarkOrange
+#define LED_TIMEOUT_MS            40000
+
+#define LED_BLINKING_TIMEOUT_MS   660
 
 #define PIN_MOTION_SENSOR         PIN_EXTRA_2
 
