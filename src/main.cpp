@@ -24,6 +24,7 @@ CRGB
   blinking_current_color = CRGB::Black;
 
 bool
+  ledOn = false,
   otaStarted = false,
   wifiWasConnected = false,
   ledBlinking = false,
@@ -43,38 +44,26 @@ RTC_DATA_ATTR unsigned long
   lastBatteryVoltageUpdateMs = 0,
   lastDoorLockOnMs = 0,
   lastLedBlinkingMs = 0,
-  lastMotionDetectedMs = 0,
-  now_global = 0;
-
-RTC_DATA_ATTR bool
-  ledOn = false;
+  lastMotionDetectedMs = 0;
 
 void light_set_color(CRGB color) {
-  if (!ledOn || color == current_color) {
-    return;
-  }
-
   current_color = color;
   FastLED.showColor(current_color);
 }
 
 void light_on(CRGB color) {
   if (ledOn && color == current_color) {
-    lastLedOn = now_global;
-    lastLedOn = now_global;
+    lastLedOn = now;
     return;
   }
 
   log_i("light ON");
-  ledOn = true;
-  lastLedOn = now_global;
+  lastLedOn = now;
 
-  current_color = color;
-  FastLED.showColor(CRGB::Yellow);
-
-  #ifdef DEBUG
-  digitalWrite(LED, HIGH);
-  #endif
+  if (!ledBlinking) {
+    lastLedOn = now;
+    light_set_color(color);
+  }
 
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/light", "1");
 }
@@ -87,68 +76,71 @@ void light_off() {
   log_i("light OFF");
 
   ledOn = false;
-  FastLED.showColor(CRGB::Black);
   FastLED.clear(true);
-
-  digitalWrite(PIN_LED_POWER, LED_POWER_OFF);
-
-  #ifdef DEBUG
-  digitalWrite(LED, LOW);
-  #endif
 
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/light", "0");
 }
 
 void light_blink_start(CRGB color) {
-  log_i("light BLINK");
+  log_i("light BLINK start");
 
   blinking_current_color = CRGB::Black;
   blinking_target_color = color;
 
   ledBlinking = true;
-  ledOn = false;
 }
 
 void light_blink_start() {
-  light_blink_start(CRGB::Red);
+  light_blink_start(CRGB::Yellow);
 }
 
 void light_blink_stop() {
   ledBlinking = false;
   ledOn = now - lastLedOn < LED_TIMEOUT_MS;
+
+  if (ledOn) {
+    light_set_color(current_color);
+  } else {
+    light_off();
+  }
 }
 
 __inline void light_blink_loop() {
-  if (!ledBlinking) return;
-
   if (now - lastLedBlinkingMs > LED_BLINKING_TIMEOUT_MS) {
     lastLedBlinkingMs = now;
 
-    if (blinking_current_color != blinking_target_color) {
-      blinking_current_color = blinking_target_color;
-      FastLED.showColor(blinking_current_color);
-    } else {
-      blinking_current_color = CRGB::Black;
-      FastLED.clear(true);
-    }
+    auto tmp = blinking_current_color;
+    blinking_current_color = blinking_target_color;
+    blinking_target_color = tmp;
+
+    FastLED.showColor(blinking_current_color);
   }
 }
 
 __inline void light_loop() {
-  light_blink_loop();
-  if (!ledOn) return;
-
-  if (now - lastLedOn > LED_TIMEOUT_MS) light_off();
-  else if (now - lastLedOn > LED_COLOR_2_TIMEOUT_MS) light_set_color(LED_COLOR_3);
-  else if (now - lastLedOn > LED_COLOR_1_TIMEOUT_MS) light_set_color(LED_COLOR_2);
+  if (otaStarted) return;
+  else if (ledBlinking) {
+    light_blink_loop();
+  }
+  else if (ledOn) {
+    if (now - lastLedOn > LED_TIMEOUT_MS) light_off();
+    else if (now - lastLedOn > LED_COLOR_2_TIMEOUT_MS) light_set_color(LED_COLOR_3);
+    else if (now - lastLedOn > LED_COLOR_1_TIMEOUT_MS) light_set_color(LED_COLOR_2);
+  }
 }
 
 void door_lock_open() {
   log_i("DOOR LOCK open");
-  door_lock.setOn();
-
-  lastDoorLockActivatedMs = millis();
   light_on();
+
+  pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "U");
+
+  digitalWrite(PIN_DOOR_LOCK, HIGH);
+  delay(500);
+  digitalWrite(PIN_DOOR_LOCK, LOW);
+
+  pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", "S");
+
 }
 
 void on_door_lock_state(PushButton *btn) {
@@ -174,27 +166,19 @@ void on_motion_state(MotionState state) {
     log_i("Motion detected!");
     lastMotionDetectedMs = now;
     light_on();
-
-    publishMotion1 =  true;
-    canSleep = false;
   }
 
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/motion", state == MotionState::Detected ? "1" : "0");
 }
 
 void battery_voltage_loop() {
-  if (now_global - lastBatteryVoltageReadMs > BATTERY_VOLTAGE_READ_MS) {
-    if (lastBatteryVoltageReadMs > 0) batteryLevel = (batteryLevel + analogRead(PIN_BATTERY_LEVEL)) / 2;
-    else batteryLevel = analogRead(PIN_BATTERY_LEVEL);
-    lastBatteryVoltageReadMs = now_global;
-  if (now_global - lastBatteryVoltageReadMs > BATTERY_VOLTAGE_READ_MS) {
-    if (lastBatteryVoltageReadMs > 0) batteryLevel = (batteryLevel + analogRead(PIN_BATTERY_LEVEL)) / 2;
-    else batteryLevel = analogRead(PIN_BATTERY_LEVEL);
-    lastBatteryVoltageReadMs = now_global;
+  if (now - lastBatteryVoltageReadMs > BATTERY_VOLTAGE_READ_MS) {
+    lastBatteryVoltageReadMs = now;
+    batteryLevel = (batteryLevel + analogRead(PIN_BATTERY_LEVEL)) / 2;
   }
 
-  if (now_global - lastBatteryVoltageUpdateMs > BATTERY_VOLTAGE_UPDATE_MS) {
-    lastBatteryVoltageUpdateMs = now_global;
+  if (now - lastBatteryVoltageUpdateMs > BATTERY_VOLTAGE_UPDATE_MS) {
+    lastBatteryVoltageUpdateMs = now;
 
     pubSubClient.publish(MQTT_TOPIC_PREFIX "/battery/raw", String(batteryLevel).c_str());
   }
@@ -213,23 +197,32 @@ void on_pubsub_message(char* topic, uint8_t* data, unsigned int length) {
   if (pubsub_topic_lock.equals(topic)) {
     if (parse_bool_meesage(data, length)) door_lock_open();
   }
-  else if (pubsub_topic_light.equals(topic) && parse_bool_meesage(data, length)) {
-    // pubSubClient.publish(pubsub_topic_light.c_str(), "0");
-    // pubSubClient.publish(pubsub_topic_light.c_str(), "0");
-    light_on();
+  else if (pubsub_topic_light.equals(topic)) {
+    if (parse_bool_meesage(data, length)) light_on();
+    else light_off();
   }
-  // else if (pubsub_topic_restart.equals(topic) && parse_bool_meesage(data, length)) {
-  //   ESP.restart();
-  // }
+  else if (pubsub_topic_restart.equals(topic) && parse_bool_meesage(data, length)) {
+    ESP.restart();
+  }
 }
 
 void on_ota_start() {
+  door_lock.setOff();
   otaStarted = true;
+  FastLED.clear(true);
+  FastLED.showColor(CRGB::Black);
 }
 
 void on_ota_error(ota_error_t err) {
   log_w("OTA ERROR: code=%u", err);
   esp_restart();
+}
+
+void on_ota_progress(unsigned int progress, unsigned int total) {
+  uint16_t ledCount = progress * LED_COUNT / total;
+  if (ledCount >= LED_COUNT) ledCount = LED_COUNT - 1;
+  FastLED.leds()[ledCount] = CRGB::SkyBlue;
+  FastLED.show();
 }
 
 void print_wakeup_reason() {
@@ -263,36 +256,38 @@ void setup() {
 
   FastLED.addLeds<WS2812B, PIN_LED, RGB>(leds, LED_COUNT);
   FastLED.setBrightness(255);
+  FastLED.clear(true);
+  FastLED.showColor(CRGB::SkyBlue);
 
   wifi_setup(true);
   pubSubClient.setCallback(on_pubsub_message);
 
   ArduinoOTA.onStart(on_ota_start);
   ArduinoOTA.onError(on_ota_error);
-  ArduinoOTA.setRebootOnSuccess(true);
-  ArduinoOTA.setMdnsEnabled(false);
-
-  ArduinoOTA.onStart(on_ota_start);
-  ArduinoOTA.onError(on_ota_error);
+  ArduinoOTA.onProgress(on_ota_progress);
   ArduinoOTA.setRebootOnSuccess(true);
   ArduinoOTA.setMdnsEnabled(false);
   ArduinoOTA.begin();
+
+  FastLED.showColor(CRGB::Black);
+  delay(333);
+  FastLED.showColor(CRGB::SkyBlue);
+  delay(333);
+  FastLED.showColor(CRGB::Black);
 
   log_i("SETUP done");
 }
 
 void loop() {
   now = millis();
-  now_global = now_global_start + now;
-  canSleep = true;
 
   mot.loop();
   door_lock_sensor.loop(now);
 
   now = millis();
   light_loop();
-  battery_voltage_loop();
-  // ble_lock_loop();
+  // battery_voltage_loop();
+  door_lock_loop();
   // ble_lock_loop();
 
   if (wifi_loop(now)) {
@@ -300,14 +295,17 @@ void loop() {
 
     ArduinoOTA.handle();
 
-    if (connectionRestored) {
-      connectionRestored = false;
+    if (mqtt_loop(now)) {
+      if (connectionRestored) {
+        connectionRestored = false;
 
-      pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", door_lock_sensor.getState() == ButtonState::On ? "U" : "S", true);
+        pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", door_lock_sensor.getState() == ButtonState::On ? "U" : "S", true);
+      }
     }
   } else {
     connectionRestored = true;
   }
 
+  door_lock_loop();
   delay(10);
 }

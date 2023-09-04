@@ -39,7 +39,7 @@ class SwitchRelayPin : public SwitchRelay {
     }
 
     virtual void setState(SwitchState_t targetState) {
-      digitalWrite(pin, targetState == On ? onValue : offValue);
+      digitalWrite(pin, targetState == SwitchState_t::On ? onValue : offValue);
       state = targetState;
     }
   
