@@ -14,7 +14,7 @@ const String pubsub_topic_light = String(MQTT_TOPIC_PREFIX "/light/set");
 const String pubsub_topic_restart = String(MQTT_TOPIC_PREFIX "/restart");
 
 MotionSensor mot(PIN_MOTION_SENSOR);
-SwitchRelayPin door_lock(PIN_DOOR_LOCK, HIGH);
+SwitchRelayPin door_lock(PIN_DOOR_LOCK);
 PushButton door_lock_sensor(PIN_DOOR_LOCK_SENSOR, INPUT_PULLUP, LOW);
 
 CRGB 
@@ -161,7 +161,7 @@ void on_door_lock_state(PushButton *btn) {
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", state == ButtonState::On ? "U" : "S", true);
 }
 
-void on_motion_state(MotionState state) {
+void on_motion_state(MotionSensor *sensor, MotionState state) {
   if (state == MotionState::Detected) {
     log_i("Motion detected!");
     lastMotionDetectedMs = now;
@@ -281,7 +281,7 @@ void setup() {
 void loop() {
   now = millis();
 
-  mot.loop();
+  mot.loop(now);
   door_lock_sensor.loop(now);
 
   now = millis();
