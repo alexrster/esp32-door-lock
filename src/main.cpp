@@ -61,6 +61,7 @@ void light_set_color(CRGB color) {
 void light_on(CRGB color) {
   if (ledOn && color == current_color) {
     lastLedOn = now_global;
+    lastLedOn = now_global;
     return;
   }
 
@@ -70,6 +71,10 @@ void light_on(CRGB color) {
 
   current_color = color;
   FastLED.showColor(CRGB::Yellow);
+
+  #ifdef DEBUG
+  digitalWrite(LED, HIGH);
+  #endif
 
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/light", "1");
 }
@@ -84,6 +89,12 @@ void light_off() {
   ledOn = false;
   FastLED.showColor(CRGB::Black);
   FastLED.clear(true);
+
+  digitalWrite(PIN_LED_POWER, LED_POWER_OFF);
+
+  #ifdef DEBUG
+  digitalWrite(LED, LOW);
+  #endif
 
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/light", "0");
 }
@@ -163,12 +174,19 @@ void on_motion_state(MotionState state) {
     log_i("Motion detected!");
     lastMotionDetectedMs = now;
     light_on();
+
+    publishMotion1 =  true;
+    canSleep = false;
   }
 
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/motion", state == MotionState::Detected ? "1" : "0");
 }
 
 void battery_voltage_loop() {
+  if (now_global - lastBatteryVoltageReadMs > BATTERY_VOLTAGE_READ_MS) {
+    if (lastBatteryVoltageReadMs > 0) batteryLevel = (batteryLevel + analogRead(PIN_BATTERY_LEVEL)) / 2;
+    else batteryLevel = analogRead(PIN_BATTERY_LEVEL);
+    lastBatteryVoltageReadMs = now_global;
   if (now_global - lastBatteryVoltageReadMs > BATTERY_VOLTAGE_READ_MS) {
     if (lastBatteryVoltageReadMs > 0) batteryLevel = (batteryLevel + analogRead(PIN_BATTERY_LEVEL)) / 2;
     else batteryLevel = analogRead(PIN_BATTERY_LEVEL);
@@ -196,6 +214,7 @@ void on_pubsub_message(char* topic, uint8_t* data, unsigned int length) {
     if (parse_bool_meesage(data, length)) door_lock_open();
   }
   else if (pubsub_topic_light.equals(topic) && parse_bool_meesage(data, length)) {
+    // pubSubClient.publish(pubsub_topic_light.c_str(), "0");
     // pubSubClient.publish(pubsub_topic_light.c_str(), "0");
     light_on();
   }
@@ -252,6 +271,11 @@ void setup() {
   ArduinoOTA.onError(on_ota_error);
   ArduinoOTA.setRebootOnSuccess(true);
   ArduinoOTA.setMdnsEnabled(false);
+
+  ArduinoOTA.onStart(on_ota_start);
+  ArduinoOTA.onError(on_ota_error);
+  ArduinoOTA.setRebootOnSuccess(true);
+  ArduinoOTA.setMdnsEnabled(false);
   ArduinoOTA.begin();
 
   log_i("SETUP done");
@@ -259,6 +283,8 @@ void setup() {
 
 void loop() {
   now = millis();
+  now_global = now_global_start + now;
+  canSleep = true;
 
   mot.loop();
   door_lock_sensor.loop(now);
@@ -266,6 +292,7 @@ void loop() {
   now = millis();
   light_loop();
   battery_voltage_loop();
+  // ble_lock_loop();
   // ble_lock_loop();
 
   if (wifi_loop(now)) {
