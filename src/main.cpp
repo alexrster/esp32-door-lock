@@ -11,17 +11,22 @@
 
 const String pubsub_topic_lock = String(MQTT_TOPIC_PREFIX "/lock/set");
 const String pubsub_topic_light = String(MQTT_TOPIC_PREFIX "/light/set");
+const String pubsub_topic_alarm = String(MQTT_TOPIC_PREFIX "/alarm/set");
 const String pubsub_topic_restart = String(MQTT_TOPIC_PREFIX "/restart");
 
 MotionSensor mot(PIN_MOTION_SENSOR);
 SwitchRelayPin door_lock(PIN_DOOR_LOCK);
 PushButton door_lock_sensor(PIN_DOOR_LOCK_SENSOR, INPUT_PULLUP, LOW);
+PushButton door_sensor(PIN_DOOR_SENSOR, INPUT_PULLUP, LOW);
+
+const CRGB black = CRGB::Black;
 
 CRGB 
   leds[LED_COUNT],
-  current_color = CRGB::Black,
+  current_color = black,
+  target_color = black,
   blinking_target_color = CRGB::Red,
-  blinking_current_color = CRGB::Black;
+  blinking_current_color = black;
 
 bool
   ledOn = false,
@@ -47,12 +52,12 @@ RTC_DATA_ATTR unsigned long
   lastMotionDetectedMs = 0;
 
 void light_set_color(CRGB color) {
-  current_color = color;
-  FastLED.showColor(current_color);
+  target_color = color;
+  // FastLED.showColor(target_color);
 }
 
 void light_on(CRGB color) {
-  if (ledOn && color == current_color) {
+  if (ledOn && color == target_color) {
     lastLedOn = now;
     return;
   }
@@ -76,7 +81,8 @@ void light_off() {
   log_i("light OFF");
 
   ledOn = false;
-  FastLED.clear(true);
+  // FastLED.clear(true);
+  target_color = black;
 
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/light", "0");
 }
@@ -84,7 +90,7 @@ void light_off() {
 void light_blink_start(CRGB color) {
   log_i("light BLINK start");
 
-  blinking_current_color = CRGB::Black;
+  blinking_current_color = black;
   blinking_target_color = color;
 
   ledBlinking = true;
@@ -99,7 +105,7 @@ void light_blink_stop() {
   ledOn = now - lastLedOn < LED_TIMEOUT_MS;
 
   if (ledOn) {
-    light_set_color(current_color);
+    light_set_color(target_color);
   } else {
     light_off();
   }
@@ -113,7 +119,8 @@ __inline void light_blink_loop() {
     blinking_current_color = blinking_target_color;
     blinking_target_color = tmp;
 
-    FastLED.showColor(blinking_current_color);
+    target_color = blinking_current_color;
+    // FastLED.showColor(blinking_current_color);
   }
 }
 
@@ -126,6 +133,18 @@ __inline void light_loop() {
     if (now - lastLedOn > LED_TIMEOUT_MS) light_off();
     else if (now - lastLedOn > LED_COLOR_2_TIMEOUT_MS) light_set_color(LED_COLOR_3);
     else if (now - lastLedOn > LED_COLOR_1_TIMEOUT_MS) light_set_color(LED_COLOR_2);
+  }
+
+  EVERY_N_MILLIS(75) {
+    if (current_color != target_color) {
+      current_color = nblend(current_color, target_color, 64);
+      FastLED.showColor(current_color);
+    }
+    else {
+      if (!ledOn && !ledBlinking && current_color == black) {
+        FastLED.clear(true);
+      }
+    }
   }
 }
 
@@ -159,6 +178,11 @@ void on_door_lock_state(PushButton *btn) {
   }
   
   pubSubClient.publish(MQTT_TOPIC_PREFIX "/lock", state == ButtonState::On ? "U" : "S", true);
+}
+
+void on_door_state(PushButton *btn) {
+  auto state = btn->getState();
+  pubSubClient.publish(MQTT_TOPIC_PREFIX "/door", state == ButtonState::On ? "C" : "O", true);
 }
 
 void on_motion_state(MotionSensor *sensor, MotionState state) {
@@ -201,6 +225,10 @@ void on_pubsub_message(char* topic, uint8_t* data, unsigned int length) {
     if (parse_bool_meesage(data, length)) light_on();
     else light_off();
   }
+  else if (pubsub_topic_alarm.equals(topic)) {
+    if (parse_bool_meesage(data, length)) light_blink_start(CRGB::Red);
+    else light_blink_stop();
+  }
   else if (pubsub_topic_restart.equals(topic) && parse_bool_meesage(data, length)) {
     ESP.restart();
   }
@@ -210,7 +238,7 @@ void on_ota_start() {
   door_lock.setOff();
   otaStarted = true;
   FastLED.clear(true);
-  FastLED.showColor(CRGB::Black);
+  FastLED.showColor(black);
 }
 
 void on_ota_error(ota_error_t err) {
@@ -253,6 +281,7 @@ void setup() {
 
   mot.onChanged(on_motion_state);
   door_lock_sensor.onChanged(on_door_lock_state);
+  door_sensor.onChanged(on_door_state);
 
   FastLED.addLeds<WS2812B, PIN_LED, RGB>(leds, LED_COUNT);
   FastLED.setBrightness(255);
@@ -269,11 +298,11 @@ void setup() {
   ArduinoOTA.setMdnsEnabled(false);
   ArduinoOTA.begin();
 
-  FastLED.showColor(CRGB::Black);
+  FastLED.showColor(black);
   delay(333);
   FastLED.showColor(CRGB::SkyBlue);
   delay(333);
-  FastLED.showColor(CRGB::Black);
+  FastLED.showColor(black);
 
   log_i("SETUP done");
 }
@@ -283,6 +312,7 @@ void loop() {
 
   mot.loop(now);
   door_lock_sensor.loop(now);
+  door_sensor.loop(now);
 
   now = millis();
   light_loop();

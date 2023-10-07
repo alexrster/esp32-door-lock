@@ -1,7 +1,7 @@
 #ifndef __CONFIG_H
 #define __CONFIG_H
 
-#define PIN_DOOR_BELL             2
+#define PIN_DOOR_SENSOR           2
 #define PIN_DOOR_LOCK             17
 #define PIN_DOOR_LOCK_SENSOR      27
 #define PIN_BATTERY_LEVEL         32

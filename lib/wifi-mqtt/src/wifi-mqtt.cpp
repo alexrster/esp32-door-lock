@@ -26,7 +26,8 @@ bool reconnectPubSub(unsigned long now) {
       log_d("MQTT: subscribe");
       // BEGIN CUSTOM CODE
       pubSubClient.subscribe(MQTT_TOPIC_PREFIX "/lock/set", 1);
-      pubSubClient.subscribe(MQTT_TOPIC_PREFIX "/light/set", 1);
+      pubSubClient.subscribe(MQTT_TOPIC_PREFIX "/light/set", 0);
+      pubSubClient.subscribe(MQTT_TOPIC_PREFIX "/alarm/set", 0);
       // END CUSTOM CODE
 
       // pubSubClient.publish(MQTT_VERSION_TOPIC, VERSION, true);
