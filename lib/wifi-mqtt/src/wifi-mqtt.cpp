@@ -49,8 +49,8 @@ bool mqtt_loop(unsigned long now) {
 
 bool wifi_loop(unsigned long now) {
   if (!WiFi.isConnected()) {
-    // if (now - lastWifiOnline > WIFI_WATCHDOG_MILLIS) esp_restart(); //restart(RESET_ON_WIFI_WD_TIMEOUT);
-    // else 
+    if (now - lastWifiOnline > WIFI_WATCHDOG_MILLIS) esp_restart(); //restart(RESET_ON_WIFI_WD_TIMEOUT);
+
     if (now - lastWifiReconnect > WIFI_RECONNECT_MILLIS) {
       lastWifiReconnect = now;
 

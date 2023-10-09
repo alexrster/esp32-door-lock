@@ -10,7 +10,7 @@
 #endif
 
 #define WIFI_RECONNECT_MILLIS         800
-#define WIFI_WATCHDOG_MILLIS          60000
+#define WIFI_WATCHDOG_MILLIS          300000
 
 #define MQTT_SERVER_NAME              "rabbitmq.in.qx.zone"
 #define MQTT_SERVER_PORT              1883
